@@ -346,6 +346,10 @@ public interface LogMessages extends BasicLogger {
     @Message(id = BASE + 386, value = "Failed to execute shutdown call back %s")
     void failedToExecuteCallback(@Cause Throwable cause, Consumer<?> callback);
 
+    @LogMessage(level = Level.WARN)
+    @Message(id = BASE + 390, value = "Unable to commit SSE response headers, client connection may have closed")
+    void failedToCommitSseHeaders();
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                                                  TRACE                                                //
     ///////////////////////////////////////////////////////////////////////////////////////////////////////////
