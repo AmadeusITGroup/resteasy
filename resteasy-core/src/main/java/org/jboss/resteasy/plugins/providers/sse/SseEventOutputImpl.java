@@ -309,13 +309,22 @@ public class SseEventOutputImpl extends GenericType<OutboundSseEvent> implements
     private BuiltResponse createResponse() {
         BuiltResponse jaxrsResponse;
         final int responseCode;
+        ResourceMethodInvoker method = (ResourceMethodInvoker) request.getAttribute(ResourceMethodInvoker.class.getName());
+        final Stream stream = FindAnnotation.findAnnotation(method.getMethodAnnotations(), Stream.class);
         if (state.get() == CLOSED) {
-            responseCode = Options.SSE_CLOSED_RESPONSE_CODE.getValue();
+            // Check if this is a @Stream endpoint (not true SSE)
+            if (stream != null) {
+                // @Stream endpoints should return 200 on completion, not 204
+                responseCode = HttpResponseCodes.SC_OK;
+            } else {
+                // True SSE endpoints return configurable status (default 204)
+                responseCode = Options.SSE_CLOSED_RESPONSE_CODE.getValue();
+            }
+
         } else //set back to client 200 OK to implies the SseEventOutput is ready
         {
             responseCode = HttpResponseCodes.SC_OK;
         }
-        ResourceMethodInvoker method = (ResourceMethodInvoker) request.getAttribute(ResourceMethodInvoker.class.getName());
         MediaType[] mediaTypes = method.getProduces();
         if (mediaTypes != null && getSseEventType(mediaTypes) != null) {
             // @Produces("text/event-stream")
@@ -334,7 +343,6 @@ public class SseEventOutputImpl extends GenericType<OutboundSseEvent> implements
                 //                   // use "element-type=text/plain"?
             }
         } else {
-            Stream stream = FindAnnotation.findAnnotation(method.getMethodAnnotations(), Stream.class);
             if (stream != null) {
                 // Get element media type from @Produces.
                 jaxrsResponse = (BuiltResponse) Response.ok("").build();
@@ -407,6 +415,28 @@ public class SseEventOutputImpl extends GenericType<OutboundSseEvent> implements
             }
 
             if (asyncContext.isSuspended()) {
+                // If the headers have not been flushed and the current status is not error or redirect related,
+                // write an empty response and commit the headers.
+                if (!responseFlushed && error == null && response.getStatus() < 300) {
+                    synchronized (lock) {
+                        if (!responseFlushed) {
+                            final BuiltResponse jaxrsResponse = createResponse();
+                            try {
+                                ServerResponseWriter.writeNomapResponse(jaxrsResponse, request, response,
+                                        providerFactory, t -> {
+                                            // we've queued a response flush, so avoid a second one being queued
+                                            responseFlushed = true;
+                                        }, true);
+                            } catch (IOException e) {
+                                LogMessages.LOGGER.failedToCommitSseHeaders();
+                                LOG.debugf(e,
+                                        "Stack trace for SSE header commit failure for built response %s and HTTP response %s",
+                                        jaxrsResponse, response);
+                            }
+                        }
+                    }
+                }
+
                 ResteasyAsynchronousResponse asyncResponse = asyncContext.getAsyncResponse();
                 if (asyncResponse != null) {
                     try {
