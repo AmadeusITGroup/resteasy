@@ -67,6 +67,12 @@ updates:
     schedule:
       interval: "daily"
     groups:
+      # Allow bouncy castle to upgrade the minor versions
+      bouncy-castle-dependencies:
+        patterns:
+          - "org.bouncycastle*"
+        update-types:
+          - "minor"
       fasterxml-dependencies:
         patterns:
           - "com.fasterxml*"
@@ -90,9 +96,6 @@ updates:
           - "patch"
     ignore:
       - dependency-name: 'io.projectreactor:*'
-        # Allow bouncy castle to upgrade the minor versions
-      - dependency-name: 'org.bouncycastle:*'
-        update-types: ['version-update:semver-major']
       - dependency-name: '*'
         update-types: ['version-update:semver-major', 'version-update:semver-minor']
     open-pull-requests-limit: 10
